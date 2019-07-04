@@ -1,4 +1,7 @@
 #source: https://stackoverflow.com/a/16385946/11736660
+#alsa error handling from: https://stackoverflow.com/a/17673011/11736660
+
+#original desciption by user eugene: 
 #Instead of adding silence at start and end of recording (values=0) I add the original audio . This makes audio sound more natural as volume is >0. See trim()
 #I also fixed issue with the previous code - accumulated silence counter needs to be cleared once recording is resumed.
 
@@ -9,6 +12,9 @@ import copy
 import pyaudio
 import wave
 
+from ctypes import * #ALSA error handling
+from contextlib import contextmanager #ALSA error handling
+
 THRESHOLD = 500  # audio levels not normalised.
 CHUNK_SIZE = 4098
 SILENT_CHUNKS = 3 * 44100 / 1024  # about 3sec
@@ -18,6 +24,19 @@ NORMALIZE_MINUS_ONE_dB = 10 ** (-1.0 / 20)
 RATE = 44100
 CHANNELS = 1
 TRIM_APPEND = RATE / 4
+
+#ALSA error handling:
+ERROR_HANDLER_FUNC = CFUNCTYPE(None, c_char_p, c_int, c_char_p, c_int, c_char_p)
+def py_error_handler(filename, line, function, err, fmt):
+    pass
+c_error_handler = ERROR_HANDLER_FUNC(py_error_handler)
+@contextmanager
+def noalsaerr():
+    asound = cdll.LoadLibrary('libasound.so')
+    asound.snd_lib_error_set_handler(c_error_handler)
+    yield
+    asound.snd_lib_error_set_handler(None)
+
 
 def is_silent(data_chunk):
     """Returns 'True' if below the 'silent' threshold"""
@@ -52,8 +71,8 @@ def trim(data_all):
 def record():
     """Record a word or words from the microphone and 
     return the data as an array of signed shorts."""
-
-    p = pyaudio.PyAudio()
+    with noalsaerr():
+        p = pyaudio.PyAudio()
     stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, output=True, frames_per_buffer=CHUNK_SIZE)
 
     silent_chunks = 0
