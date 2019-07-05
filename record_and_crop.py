@@ -14,6 +14,7 @@ import wave
 
 from ctypes import * #ALSA error handling
 from contextlib import contextmanager #ALSA error handling
+import time
 
 THRESHOLD = 500  # audio levels not normalised.
 CHUNK_SIZE = 4098
@@ -24,6 +25,7 @@ NORMALIZE_MINUS_ONE_dB = 10 ** (-1.0 / 20)
 RATE = 44100
 CHANNELS = 1
 TRIM_APPEND = RATE / 4
+ANALYZING_SECONDS = 30
 
 #ALSA error handling:
 ERROR_HANDLER_FUNC = CFUNCTYPE(None, c_char_p, c_int, c_char_p, c_int, c_char_p)
@@ -93,10 +95,11 @@ def record():
                 silent_chunks += 1
                 if silent_chunks > SILENT_CHUNKS:
                     break
-            else: 
+            else:
                 silent_chunks = 0
         elif not silent:
             audio_started = True              
+            print('noise detected, starting recording')
 
     sample_width = p.get_sample_size(FORMAT)
     stream.stop_stream()
@@ -107,8 +110,36 @@ def record():
     data_all = normalize(data_all)
     return sample_width, data_all
 
+def analyze_threshold():
+    """Record background noise and set threshold accordingly"""
+    print("analyzing background noise for {} seconds".format(ANALYZING_SECONDS))
+    with noalsaerr():
+        p = pyaudio.PyAudio()
+    stream = p.open(format=FORMAT, channels=CHANNELS, rate=RATE, input=True, output=True, frames_per_buffer=CHUNK_SIZE)
+
+    max_background = 0
+
+    start = time.time()
+    while time.time()<(start+ANALYZING_SECONDS):
+        # little endian, signed short
+        data_chunk = array('h', stream.read(CHUNK_SIZE))
+        if byteorder == 'big':
+            data_chunk.byteswap()
+        #data_all.extend(data_chunk)
+        max_background = max(max_background,int(max(data_chunk)))
+
+    print("setting threshold to {} (instead of fixed threshold of 500)".format(max_background))
+    THRESHOLD = max_background
+
+    stream.stop_stream()
+    stream.close()
+    p.terminate()
+
+
+
 def record_to_file(path):
     "Records from the microphone and outputs the resulting data to 'path'"
+    threshold = analyze_threshold()
     sample_width, data = record()
     data = pack('<' + ('h' * len(data)), *data)
 
