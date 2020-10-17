@@ -8,6 +8,7 @@ initial script based on https://stackoverflow.com/a/16385946/11736660
 # installation
 
 If there is [gcc-related problem](https://stackoverflow.com/questions/20023131/cannot-install-pyaudio-gcc-error) with pyaudio, install this stuff: 
+
 `sudo apt-get install libasound-dev portaudio19-dev libportaudio2 libportaudiocpp0`
 
 Run test_levels.py to check it works. It should show "LOUD" when you speak something into your mic.
